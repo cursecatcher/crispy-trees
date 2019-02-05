@@ -1,6 +1,7 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from math import log2
 import re
 
 class CompleteNodeException(Exception):
@@ -16,6 +17,37 @@ class UndefinedEdgeException(Exception):
 class UnparsableTreeException(Exception):
     def __init__(self, message):
         super(UnparsableTreeException, self).__init__(message)
+
+
+class CoveredExamples(object):
+    def __init__(self, n_pos, n_neg):
+        self.__pos = n_pos
+        self.__neg = n_neg
+        self.__tot = n_pos + n_neg
+
+    @property
+    def num_pos(self):
+        return self.__pos
+
+    @property
+    def num_neg(self):
+        return self.__neg
+
+    @property
+    def num_covered(self):
+        return self.__tot
+
+    @property
+    def entropy(self):
+        p = self.num_pos / self.num_covered
+        if p == 0 or p == 1:
+            return 0
+
+        return -p*log2(p) - (1-p)*log2(1-p) if p not in (0,1) else 0
+
+    def __str__(self):
+        return "[{}+, {}-]".format(self.num_pos, self.num_neg)
+
 
 
 class DecisionTree(object):
@@ -41,6 +73,10 @@ class DecisionTree(object):
         candidates = filter(lambda node: node.threshold == threshold_value and not node.is_complete(), self.__nodes[node_id])
         #[node for node in self.__nodes[node_id] if node.threshold == threshold_value]
         return list(candidates) #candidate.pop() if candidate else False
+
+    @property
+    def root(self):
+        return self.__root
 
     @staticmethod
     def parse(filename, verbose=False):
@@ -121,12 +157,43 @@ class DecisionTree(object):
         if parsing_failed:
             raise UnparsableTreeException("Cannot parse {} file".format(filename))
 
+        current_tree.__root.set_coverage()
+
         return current_tree
 
 
+    @staticmethod
+    def get_entropies(exploration):
+        weighted_entropies = dict()
+        tot_elements = exploration[0][0].covered.num_covered
+
+        for node, depth in exploration:
+            if depth not in weighted_entropies:
+                weighted_entropies[depth] = list()
+            weighted_entropies[depth].append((node.entropy*node.covered.num_covered, node.covered.num_covered))
+
+        max_depth = max(weighted_entropies.keys())
+        result = [(
+            sum([ws for ws, c in weighted_entropies[depth]]) / tot_elements,
+            sum([ws for ws, _ in weighted_entropies[depth]]) / sum([c for _, c in weighted_entropies[depth]]))
+            for depth in range(max_depth+1)]
+        return result
+
+        # result = [for depth in range(len(weighted_entropies))]
+        #
+        # d = {n:list() for n in range(max_depth+1)}
+        # for node, depth in explorations[0]:
+        #     d[depth].append((node.entropy*node.covered.num_covered, node.covered.num_covered))
+        # else:
+        #     asd = (explorations[0][0][0].covered.num_covered)
+        #     for depth in d.keys():
+        #         weighted, elements = zip(*d[depth])
+        #         d[depth] = sum(weighted) / asd#sum(elements)
+        #         print("{}: {}".format(depth, d[depth]))
+
     def bfs(self, max_depth=None):
-        """Breadth-first search (BFS) explores the tree in a level-wise fashion, starting
-        from the root to the leaves."""
+        """Breadth-first search (BFS) explores the tree in a level-wise fashion,
+        starting from the root to the leaves."""
 
         open_nodes = [(self.__root, 0)]
         visited = list()
@@ -137,9 +204,11 @@ class DecisionTree(object):
             if not node.is_leaf():
                 if max_depth is None or depth <= max_depth:
                     open_nodes.extend([(node.left_child, depth + 1), (node.right_child, depth + 1)])
-                    visited.append((node, depth))
+
+            visited.append((node, depth))
 
         return visited
+
 
     def __len__(self):
         """Returns the total number of nodes (internals and leaves) of the tree"""
@@ -158,6 +227,31 @@ class Node(object):
         self.__father = None
         self.__left = None
         self.__right = None
+        #details about covered examples in training set
+        self.covered = None
+
+    @property
+    def entropy(self):
+    #    return self.covered.entropy
+
+        if self.is_leaf():
+            return self.covered.entropy
+        else:
+            #calculate weighted entropy for mutually esclusive nodes
+            left = self.left_child.covered
+            right = self.right_child.covered
+
+            return (left.num_covered * left.entropy + right.num_covered * right.entropy) / self.covered.num_covered
+
+
+    # def visit(self, depth=0):
+    #     if not self.is_leaf():
+    #         self.left_child.visit(depth+1)
+    #         print("{}> {}, {}".format(depth, self.entropy, self.covered))
+    #         self.right_child.visit(depth+1)
+    #     else:
+    #         print("{}) {}, {}".format(depth, self.entropy, self.covered))
+    #
 
     def is_leaf(self):
         return False
@@ -187,6 +281,17 @@ class Node(object):
         node.father = self
 
         return self
+
+    def set_coverage(self):
+        if not self.is_leaf():
+            left_coverage = self.left_child.set_coverage()
+            right_coverage = self.right_child.set_coverage()
+
+            pos = left_coverage.num_pos + right_coverage.num_pos
+            neg = left_coverage.num_neg + right_coverage.num_neg
+
+            self.covered = CoveredExamples(pos, neg)
+        return self.covered
 
     @property
     def father(self):
@@ -251,6 +356,13 @@ class LeafNode(Node):
         super().__init__()
         self.__label = label
         self.__ratio = ratio if ratio else "?"
+
+        if ratio is not None:
+            bigger, smaller = [float(x) for x in ratio.split("/")] if "/" in ratio \
+                else (float(ratio), 0)
+            self.covered = CoveredExamples(smaller, bigger) if label == "CX" \
+                else CoveredExamples(bigger, smaller)
+
 
     def is_leaf(self):
         return True

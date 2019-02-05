@@ -1,19 +1,38 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import argparse
 import collections
 import csv
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 import os, sys
-
 from timeit import default_timer as timer
 import wekatree
-
 
 
 def format_time(time):
     strtime = "{:03.5f} m".format(time/60) if time >= 60 else "{:03.5f} s".format(time)
     return strtime
+
+
+def plot_entropies(bfs_list):
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+
+    for exploration in bfs_list:
+        good, evil = zip(*wekatree.DecisionTree.get_entropies(exploration))
+
+        x = range(len(good))
+        y = good
+
+        ax.plot(x,y,"o:", label=".")
+
+    plt.xlabel("depth")
+    plt.ylabel("weighted entropy")
+    ax.legend().remove()
+
+    return fig
 
 
 
@@ -24,7 +43,8 @@ if __name__ == "__main__":
     parser.add_argument("--out", "-o", dest="output", action="store", type=str, required=True)
     parser.add_argument("--depth", "-d", dest="max_depth", action="store", type=int, default=None)
     parser.add_argument("--threshold", "-t", dest="threshold", action="store", type=float, default="1.0")
-    parser.add_argument("--verbose", "-v", dest="verbose", action="store_true", default=False)
+    parser.add_argument("--verbose", "-v", dest="verbose", action="store_true")
+    parser.add_argument("--entropy", "-e", dest="entropy", action="store_true")
 
     args = parser.parse_args()
     max_depth = args.max_depth
@@ -55,7 +75,7 @@ if __name__ == "__main__":
             explorations.append(tree.bfs(max_depth))
 
         except wekatree.UnparsableTreeException:
-            print("\033[01;31mCannot parse {}\033[00m".format(filename))
+            print("\033[01;31mCannot parse {}. Ignored.\033[00m".format(filename))
     else:
         #calculating max_depth if the user has not provided the proper parameter
         if max_depth is None:
@@ -94,6 +114,24 @@ if __name__ == "__main__":
         os.mkdir(args.output)
     except FileExistsError:
         pass
+
+
+    if args.entropy:
+        print("- Obtaining entropy distribution over tree levels...", end="")
+        start = timer()
+
+        with open("{}/entropies.csv".format(args.output), "w") as f:
+            writer = csv.writer(f, delimiter=",")
+
+            for visit in explorations:
+                good, evil = zip(*wekatree.DecisionTree.get_entropies(visit))
+                writer.writerow(good)
+
+        end = timer()
+        plot_entropies(explorations).savefig("{}/entropies.pdf".format(args.output), bbox_inches="tight")
+
+        print("completed in {}".format(format_time(end-start)))
+
 
     with open("{}/all.csv".format(args.output), "w") as fo:
         csvfo = csv.writer(fo, delimiter="\t")
