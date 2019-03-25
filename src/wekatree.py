@@ -174,7 +174,7 @@ class DecisionTree(object):
 
         max_depth = max(weighted_entropies.keys())
         result = [(
-            sum([ws for ws, c in weighted_entropies[depth]]) / tot_elements,
+            sum([ws for ws, c in weighted_entropies[depth]])/ tot_elements,
             sum([ws for ws, _ in weighted_entropies[depth]]) / sum([c for _, c in weighted_entropies[depth]]))
             for depth in range(max_depth+1)]
         return result

@@ -80,7 +80,8 @@ if __name__ == "__main__":
         #calculating max_depth if the user has not provided the proper parameter
         if max_depth is None:
             max_depth = max([bfs_result[-1][1] for bfs_result in explorations])
-            print("- Max depth is {}".format(max_depth))
+        print("- Max depth is {}".format(max_depth))
+
 
     end = timer()
 
@@ -91,7 +92,7 @@ if __name__ == "__main__":
 
     start = timer()
 
-    counters = [collections.Counter() for depth in range(max_depth + 1)]
+    counters = [collections.Counter() for depth in range(max_depth + 2)]
     distributions = list()
 
     for bfs_result in explorations:
@@ -102,6 +103,7 @@ if __name__ == "__main__":
             tot = sum(counter.values())
             distr = sorted([(k, v, v/tot) for k, v in counter.items()], key=lambda t: t[1], reverse=True)
             distributions.append((level, distr))
+
 
     end = timer()
 
@@ -138,21 +140,22 @@ if __name__ == "__main__":
         csvfo.writerow(["depth", "gene_id", "num", "freq"])
 
         for level, current in distributions:
-            with open("{}/level_{}.csv".format(args.output, level), "w") as fo_level:
-                csvlevel = csv.writer(fo_level, delimiter="\t")
-                csvlevel.writerow(["gene_id", "num", "freq"])
+            if level <= max_depth:
+                with open("{}/level_{}.csv".format(args.output, level), "w") as fo_level:
+                    csvlevel = csv.writer(fo_level, delimiter="\t")
+                    csvlevel.writerow(["gene_id", "num", "freq"])
 
-                partial_sum = 0
+                    partial_sum = 0
 
-                for gene, num, freq in current:
-                    curr = [level, gene, num, "{:.4f}".format(freq)]
+                    for gene, num, freq in current:
+                        curr = [level, gene, num, "{:.4f}".format(freq)]
 
-                    if partial_sum <= args.threshold:
-                        csvfo.writerow(curr)
-                        csvlevel.writerow(curr[1:])
+                        if partial_sum <= args.threshold:
+                            csvfo.writerow(curr)
+                            csvlevel.writerow(curr[1:])
 
-                        partial_sum += freq
-                    else:
-                        break
+                            partial_sum += freq
+                        else:
+                            break
 
     print("Done")
