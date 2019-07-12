@@ -107,7 +107,8 @@ if __name__ == "__main__":
 
                 for tree in trees:
                     for record in tree.get_node(gene):
-                        csvfo.writerow([tree.filename] + record)
+                        if args.max_depth is not None and record[1] <= args.max_depth:
+                            csvfo.writerow([tree.filename] + record)
         
         sys.exit(0)
 
