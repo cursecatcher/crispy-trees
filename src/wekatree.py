@@ -67,6 +67,7 @@ class DecisionTree(object):
         self.__nodes = dict()
 
         self.__num_leaves = 0
+        self.__filename = None
 
     def __get_candidates(self, node_id, threshold_value):
         #ultimo nodo incompleto con tale id e tale threshold
@@ -78,11 +79,20 @@ class DecisionTree(object):
     def root(self):
         return self.__root
 
+    @property
+    def filename(self):
+        return self.__filename
+
+    @filename.setter
+    def filename(self, value):
+        self.__filename = value.split("/")[-1].split(".")[0]
+
     @staticmethod
     def parse(filename, verbose=False):
         """ Parsing method for a single decision tree. Return the parsed tree"""
 
         current_tree = DecisionTree()
+        current_tree.filename = filename
 
         parsing_failed = False
         prev_node, prev_threshold = None, None
@@ -209,6 +219,39 @@ class DecisionTree(object):
 
         return visited
 
+    def get_node(self, target):
+        #dirty code?
+        def get_info(node, depth, which = "sx"):
+            child, edge = node.left_child, node.left_edge
+            if which == "dx":
+                child, edge = node.right_child, node.right_edge
+            
+            return [
+                depth, 
+                edge.relation, 
+                edge.threshold, 
+                child.covered.num_covered,
+                child.covered.num_pos,
+                child.covered.num_neg
+            ]
+
+        data = list()
+
+        for nodes in self.__nodes.values():
+            for node in nodes:
+                if node.node_id == target:
+                    #obtain node depth 
+                    depth, tmp = 0, node.father
+                    while tmp is not None: 
+                        tmp = tmp.father 
+                        depth += 1
+
+                    data.append(get_info(node, depth))
+                    data.append(get_info(node, depth, "dx"))
+    
+        data.sort(key=lambda l: l[1])
+        return data
+
 
     def __len__(self):
         """Returns the total number of nodes (internals and leaves) of the tree"""
@@ -312,6 +355,14 @@ class Node(object):
     @property
     def right_child(self):
         return self.__right.target
+    
+    @property
+    def left_edge(self):
+        return self.__left
+    
+    @property
+    def right_edge(self):
+        return self.__right
 
     @property
     def node_id(self):
@@ -331,6 +382,10 @@ class Edge(object):
         self.__relation = relation
         self.__label = threshold
         self.__target = None #Node o LeafNode
+
+    @property
+    def relation(self):
+        return self.__relation
 
     @property
     def threshold(self):

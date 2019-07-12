@@ -45,9 +45,17 @@ if __name__ == "__main__":
     parser.add_argument("--threshold", "-t", dest="threshold", action="store", type=float, default="1.0")
     parser.add_argument("--verbose", "-v", dest="verbose", action="store_true")
     parser.add_argument("--entropy", "-e", dest="entropy", action="store_true")
+    parser.add_argument("--genes", "-g", dest="target_genes", action="store", type=str, nargs="+")
 
     args = parser.parse_args()
     max_depth = args.max_depth
+
+    
+    try:
+        print("- Output data will be written in {} folder...".format(args.output))
+        os.mkdir(args.output)
+    except FileExistsError:
+        pass
 
 
     #obtaining files to parse
@@ -61,6 +69,7 @@ if __name__ == "__main__":
 
 
     start = timer()         #3, 2, 1....
+    trees = list()
     explorations = list()
 
     print("- Parsing and visiting trees...")
@@ -72,20 +81,54 @@ if __name__ == "__main__":
                 print("Parsing and visiting tree in {}... ".format(filename))
 
             tree = wekatree.DecisionTree.parse(filename, args.verbose)
+            trees.append(tree)
             explorations.append(tree.bfs(max_depth))
 
         except wekatree.UnparsableTreeException:
             print("\033[01;31mCannot parse {}. Ignored.\033[00m".format(filename))
-    else:
-        #calculating max_depth if the user has not provided the proper parameter
-        if max_depth is None:
-            max_depth = max([bfs_result[-1][1] for bfs_result in explorations])
-        print("- Max depth is {}".format(max_depth))
-
+    
+    #calculating max_depth if the user has not provided the proper parameter
+    if max_depth is None:
+        max_depth = max([bfs_result[-1][1] for bfs_result in explorations])
 
     end = timer()
 
     print("- Parsing of {} trees completed in {}".format(len(explorations), format_time(end-start)))
+    print("- Max depth is {}".format(max_depth))
+
+    if args.target_genes is not None: 
+        for gene in args.target_genes:
+            print("- Checking for gene {}".format(gene))
+
+            with open("{}/gene_{}.csv".format(args.output, gene), "w") as fo:
+                csvfo = csv.writer(fo, delimiter=",")
+                
+                csvfo.writerow(["filename", "depth", "relation", "threshold", "tot", "pos", "neg"])
+
+                for tree in trees:
+                    for record in tree.get_node(gene):
+                        csvfo.writerow([tree.filename] + record)
+        
+        sys.exit(0)
+
+    if args.entropy:
+        print("- Obtaining entropy distribution over tree levels...", end="")
+        start = timer()
+
+        with open("{}/entropies.csv".format(args.output), "w") as f:
+            writer = csv.writer(f, delimiter=",")
+
+            for visit in explorations:
+                good, evil = zip(*wekatree.DecisionTree.get_entropies(visit))
+                writer.writerow(good)
+
+        end = timer()
+        plot_entropies(explorations).savefig("{}/entropies.pdf".format(args.output), bbox_inches="tight")
+
+        print("completed in {}".format(format_time(end-start)))
+
+
+
 
     #obtaining greta's stuff
     print("- Doing stuff with BFS data...", end="")
@@ -109,32 +152,7 @@ if __name__ == "__main__":
 
     print("completed in {}".format(format_time(end-start)))
 
-
-    print("- Output data will be written in {} folder...".format(args.output))
-
-    try:
-        os.mkdir(args.output)
-    except FileExistsError:
-        pass
-
-
-    if args.entropy:
-        print("- Obtaining entropy distribution over tree levels...", end="")
-        start = timer()
-
-        with open("{}/entropies.csv".format(args.output), "w") as f:
-            writer = csv.writer(f, delimiter=",")
-
-            for visit in explorations:
-                good, evil = zip(*wekatree.DecisionTree.get_entropies(visit))
-                writer.writerow(good)
-
-        end = timer()
-        plot_entropies(explorations).savefig("{}/entropies.pdf".format(args.output), bbox_inches="tight")
-
-        print("completed in {}".format(format_time(end-start)))
-
-
+    
     with open("{}/all.csv".format(args.output), "w") as fo:
         csvfo = csv.writer(fo, delimiter="\t")
         csvfo.writerow(["depth", "gene_id", "num", "freq"])
