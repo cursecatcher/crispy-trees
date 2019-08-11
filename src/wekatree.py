@@ -56,8 +56,8 @@ class DecisionTree(object):
     Leaves are labelled with the predicted class.
     Features are genes and feature values represent gene expression data (credo)"""
 
-    internal_regex = re.compile(r"^(\w+) (\S+) (\d+)$")
-    leaf_regex = re.compile(r"^(\w+) (\S+) (\d+): (\w+) \((\S+)\)$")
+    split_regex = re.compile(r"[:\ ]")
+
 
     def __init__(self):
         """ The tree is a recursive data structure. The root is the entire tree.
@@ -98,28 +98,26 @@ class DecisionTree(object):
         prev_node, prev_threshold = None, None
 
         with open(filename) as f:
-            for line in f:
+            for index, line in enumerate(f):
                 try:
-                    stripped = line.replace("|", "").strip()
-                    is_leaf = ":" in stripped
-                    result = DecisionTree.leaf_regex.match(stripped) if is_leaf \
-                        else DecisionTree.internal_regex.match(stripped)
+                    tokens = [token.strip() for token in DecisionTree.split_regex.split(line.replace("|", "")) if token != ""]
 
-                    #extract gene id
-                    gene = result.group(1)
-
-                    #initialize the edge: extract edge label
-                    relation, threshold = result.group(2), result.group(3)
+                    #extract gene id, relation and threshold 
+                    gene, relation, threshold = tokens[:3]
+                    #initialize edge 
                     edge = Edge(relation, threshold)
-
-                    if is_leaf:
-                        #extract predicted class
-                        edge.set_leaf(label = result.group(4), ratio = result.group(5))
+     
+                    if ":" in line: #is leaf?
+                        #extract predicted class 
+                        label, ratio = tokens[3], tokens[4][1:-1] #remove '(' and ')'
+                        edge.set_leaf(label, ratio) 
                         current_tree.__num_leaves += 1
 
-                except AttributeError:
+                except IndexError:
+                    print("Parsing failed at line {}: {}".format(index, line)) #print random bestemmie
                     parsing_failed = True
                     break
+                
 
                 #initialize a new node
                 new_node = Node(gene).set_edge(edge)
